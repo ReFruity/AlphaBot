@@ -51,6 +51,8 @@ struct Position {
     int movesMade;
     // [a-z][1-8]
     CellState boardState[8][8];
+    // TODO: Remove debug variable
+    static int entities;
 
     Position() {
         this->playerToMove = WhitePlayer;
@@ -64,6 +66,7 @@ struct Position {
         for (int y = 6; y < 8; y++) {
             fillY(y, Black);
         }
+        entities++;
     }
 
     void fillY(int y, CellState cellState) {
@@ -76,6 +79,11 @@ struct Position {
         this->playerToMove = other.playerToMove;
         this->movesMade = other.movesMade;
         memcpy(this->boardState, other.boardState, 8 * 8);
+        entities++;
+    }
+
+    ~Position() {
+        entities--;
     }
 
     CellState getCellState(Cell cell) const {
@@ -132,7 +140,7 @@ struct Position {
     void makeMove(Move move) {
         boardState[move.to.x][move.to.y] = boardState[move.from.x][move.from.y];
         boardState[move.from.x][move.from.y] = Empty;
-        playerToMove == WhitePlayer ? BlackPlayer : WhitePlayer;
+        playerToMove = playerToMove == WhitePlayer ? BlackPlayer : WhitePlayer;
         movesMade++;
     }
 
@@ -141,19 +149,27 @@ struct Position {
     }
 };
 
-bool isFinal(Position &position);
+int Position::entities = 0;
 
-int countScore(Position &position);
+bool isFinal(const Position &position);
 
-vector<Position> *getChildPositions(const Position &position);
+int countScore(const Position &position);
 
-bool blackWins(Position &position);
+vector<Position> getChildPositions(const Position &position);
 
-bool whiteWins(Position &position);
+int alphaBetaPruning(const Position &position, int alpha, int beta, int depth);
 
-int alphaBetaPruning(Position &position, int alpha, int beta);
+int whiteScore(const Position &position);
+
+int blackScore(const Position &position);
+
+bool whiteWins(const Position &position);
+
+bool blackWins(const Position &position);
 
 const int NEGATIVE_INF = INT_MIN, POSITIVE_INF = INT_MAX;
+
+bool debug = false;
 
 void test() {
     Position position = Position();
@@ -168,8 +184,10 @@ void test() {
     assert(Position().getPossibleMoves("a2").size() == 2);
     assert(Position().getPossibleMoves("a1").size() == 0);
 
-    int actualChildPositions = getChildPositions(Position())->size();
-    assert(actualChildPositions == 22);
+    auto actualChildPositions = getChildPositions(Position());
+    assert(actualChildPositions.size() == 22);
+    assert(all_of(actualChildPositions.begin(), actualChildPositions.end(), [](Position p) { return p.playerToMove == BlackPlayer; }));
+    assert(all_of(actualChildPositions.begin(), actualChildPositions.end(), [](Position p) { return p.movesMade == 1; }));
 
     position = Position();
     position.makeMove("e2e8");
@@ -189,7 +207,7 @@ void test() {
 }
 
 int main(int argc, char *argv[]) {
-    bool debug = argc == 2 && strcmp(argv[1], "debug") == 0;
+    debug = argc == 2 && strcmp(argv[1], "debug") == 0;
 
     if (debug) {
         test();
@@ -197,14 +215,16 @@ int main(int argc, char *argv[]) {
         freopen("output.txt", "w", stdout);
     }
 
+    const int MAX_DEPTH = 10;
     Position startingPosition = Position();
-    alphaBetaPruning(startingPosition, NEGATIVE_INF, POSITIVE_INF);
+    cout << alphaBetaPruning(startingPosition, NEGATIVE_INF, POSITIVE_INF, MAX_DEPTH) << endl;
+    cout << Position::entities << endl;
 
     return 0;
 }
 
-int alphaBetaPruning(Position &position, int alpha, int beta) {
-    if (isFinal(position)) {
+int alphaBetaPruning(const Position &position, int alpha, int beta, int depth) {
+    if (depth == 0 || isFinal(position)) {
         return countScore(position);
     }
 
@@ -213,11 +233,14 @@ int alphaBetaPruning(Position &position, int alpha, int beta) {
 
     if (position.playerToMove == WhitePlayer) {
         score = NEGATIVE_INF;
-        for (auto it = childPositions->begin(); it != childPositions->end(); it++) {
-            score = max(score, alphaBetaPruning(*it, alpha, beta));
+        for (auto it = childPositions.begin(); it != childPositions.end(); it++) {
+            score = max(score, alphaBetaPruning(*it, alpha, beta, depth - 1));
             alpha = max(alpha, score);
             if (beta <= alpha) {
-                cout << "beta pruning " << childPositions->size() << endl;
+                // TODO: Debug prints
+                if (debug) {
+                    cout << "beta pruning " << childPositions.size() << endl;
+                }
                 // Бета отсечение
                 break;
             }
@@ -225,11 +248,13 @@ int alphaBetaPruning(Position &position, int alpha, int beta) {
     }
     else {
         score = POSITIVE_INF;
-        for (auto it = childPositions->begin(); it != childPositions->end(); it++) {
-            score = min(score, alphaBetaPruning(*it, alpha, beta));
+        for (auto it = childPositions.begin(); it != childPositions.end(); it++) {
+            score = min(score, alphaBetaPruning(*it, alpha, beta, depth - 1));
             beta = min(beta, score);
             if (beta <= alpha) {
-                cout << "alpha pruning " << childPositions->size() << endl;
+                if (debug) {
+                    cout << "alpha pruning " << childPositions.size() << endl;
+                }
                 // Альфа отсечение
                 break;
             }
@@ -239,27 +264,11 @@ int alphaBetaPruning(Position &position, int alpha, int beta) {
     return score;
 }
 
-bool isFinal(Position &position) {
-    return blackWins(position) || whiteWins(position);
+bool isFinal(const Position &position) {
+    return whiteWins(position) || blackWins(position);
 }
 
-int countScore(Position &position) {
-    if (blackWins(position)) return 0;
-
-    if (whiteWins(position)) return 1;
-
-    throw "Cannot count score for non-final position.";
-}
-
-bool blackWins(Position &position) {
-    for (int x = 0; x < 8; x++) {
-        if (position.boardState[x][0] == Black) return true;
-    }
-
-    return false;
-}
-
-bool whiteWins(Position &position) {
+bool whiteWins(const Position &position) {
     for (int x = 0; x < 8; x++) {
         if (position.boardState[x][7] == White) return true;
     }
@@ -267,9 +276,44 @@ bool whiteWins(Position &position) {
     return false;
 }
 
-vector<Position> *getChildPositions(const Position &position) {
-    auto childPositions = new vector<Position>;
-    Player otherPlayer = position.playerToMove == WhitePlayer ? BlackPlayer : WhitePlayer;
+bool blackWins(const Position &position) {
+    for (int x = 0; x < 8; x++) {
+        if (position.boardState[x][0] == Black) return true;
+    }
+
+    return false;
+}
+
+int countScore(const Position &position) {
+    return whiteScore(position) - blackScore(position);
+}
+
+int whiteScore(const Position &position) {
+    for (int y = 7; y >= 0; y--) {
+        for (int x = 0; x < 8; x++) {
+            if (position.boardState[x][y] == White) {
+                return y;
+            }
+        }
+    }
+
+    return 0;
+}
+
+int blackScore(const Position &position) {
+    for (int y = 0; y < 8; y++) {
+        for (int x = 0; x < 8; x++) {
+            if (position.boardState[x][y] == Black) {
+                return 7 - y;
+            }
+        }
+    }
+
+    return 0;
+}
+
+vector<Position> getChildPositions(const Position &position) {
+    auto childPositions = vector<Position>();
     CellState cellState = position.playerToMove == WhitePlayer ? White : Black;
 
     for (int x = 0; x < 8; x++) {
@@ -280,10 +324,8 @@ vector<Position> *getChildPositions(const Position &position) {
 
             for (auto it = possibleMoves.begin(); it != possibleMoves.end(); it++) {
                 Position childPosition = Position(position);
-                childPosition.playerToMove = otherPlayer;
-                childPosition.movesMade++;
                 childPosition.makeMove(*it);
-                childPositions->push_back(childPosition);
+                childPositions.push_back(childPosition);
             }
         }
     }
