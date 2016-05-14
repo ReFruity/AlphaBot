@@ -94,6 +94,27 @@ struct Position {
         return getCellState(Cell(notation));
     }
 
+    vector<Position> getChildPositions() const {
+        auto childPositions = vector<Position>();
+        CellState cellState = this->playerToMove == WhitePlayer ? White : Black;
+
+        for (int x = 0; x < 8; x++) {
+            for (int y = 0; y < 8; y++) {
+                if (this->boardState[x][y] != cellState) continue;
+
+                const vector<Move> &possibleMoves = this->getPossibleMoves(Cell(x, y));
+
+                for (auto it = possibleMoves.begin(); it != possibleMoves.end(); it++) {
+                    Position childPosition = Position(*this);
+                    childPosition.makeMove(*it);
+                    childPositions.push_back(childPosition);
+                }
+            }
+        }
+
+        return childPositions;
+    }
+
     vector<Move> getPossibleMoves(Cell cell) const {
         CellState cellState = getCellState(cell);
         vector<Move> result;
@@ -147,25 +168,59 @@ struct Position {
     void makeMove(const char *notation) {
         makeMove(Move(notation));
     }
+
+    bool isFinal() const {
+        return this->whiteWins() || this->blackWins();
+    }
+
+    bool whiteWins() const {
+        for (int x = 0; x < 8; x++) {
+            if (this->boardState[x][7] == White) return true;
+        }
+
+        return false;
+    }
+
+    bool blackWins() const {
+        for (int x = 0; x < 8; x++) {
+            if (this->boardState[x][0] == Black) return true;
+        }
+
+        return false;
+    }
+
+    int countScore() const {
+        return this->whiteScore() - this->blackScore();
+    }
+
+    int whiteScore() const {
+        for (int y = 7; y >= 0; y--) {
+            for (int x = 0; x < 8; x++) {
+                if (this->boardState[x][y] == White) {
+                    return y;
+                }
+            }
+        }
+
+        return 0;
+    }
+
+    int blackScore() const {
+        for (int y = 0; y < 8; y++) {
+            for (int x = 0; x < 8; x++) {
+                if (this->boardState[x][y] == Black) {
+                    return 7 - y;
+                }
+            }
+        }
+
+        return 0;
+    }
 };
 
 int Position::entities = 0;
 
-bool isFinal(const Position &position);
-
-int countScore(const Position &position);
-
-vector<Position> getChildPositions(const Position &position);
-
 int alphaBetaPruning(const Position &position, int alpha, int beta, int depth);
-
-int whiteScore(const Position &position);
-
-int blackScore(const Position &position);
-
-bool whiteWins(const Position &position);
-
-bool blackWins(const Position &position);
 
 const int NEGATIVE_INF = INT_MIN, POSITIVE_INF = INT_MAX;
 
@@ -184,18 +239,18 @@ void test() {
     assert(Position().getPossibleMoves("a2").size() == 2);
     assert(Position().getPossibleMoves("a1").size() == 0);
 
-    auto actualChildPositions = getChildPositions(Position());
+    auto actualChildPositions = Position().getChildPositions();
     assert(actualChildPositions.size() == 22);
     assert(all_of(actualChildPositions.begin(), actualChildPositions.end(), [](Position p) { return p.playerToMove == BlackPlayer; }));
     assert(all_of(actualChildPositions.begin(), actualChildPositions.end(), [](Position p) { return p.movesMade == 1; }));
 
     position = Position();
     position.makeMove("e2e8");
-    assert(whiteWins(position));
+    assert(position.whiteWins());
 
     position = Position();
     position.makeMove("e7e1");
-    assert(blackWins(position));
+    assert(position.blackWins());
 
     position = Position();
     Position copy = Position(position);
@@ -224,11 +279,11 @@ int main(int argc, char *argv[]) {
 }
 
 int alphaBetaPruning(const Position &position, int alpha, int beta, int depth) {
-    if (depth == 0 || isFinal(position)) {
-        return countScore(position);
+    if (depth == 0 || position.isFinal()) {
+        return position.countScore();
     }
 
-    auto childPositions = getChildPositions(position);
+    auto childPositions = position.getChildPositions();
     int score;
 
     if (position.playerToMove == WhitePlayer) {
@@ -262,73 +317,4 @@ int alphaBetaPruning(const Position &position, int alpha, int beta, int depth) {
     }
 
     return score;
-}
-
-bool isFinal(const Position &position) {
-    return whiteWins(position) || blackWins(position);
-}
-
-bool whiteWins(const Position &position) {
-    for (int x = 0; x < 8; x++) {
-        if (position.boardState[x][7] == White) return true;
-    }
-
-    return false;
-}
-
-bool blackWins(const Position &position) {
-    for (int x = 0; x < 8; x++) {
-        if (position.boardState[x][0] == Black) return true;
-    }
-
-    return false;
-}
-
-int countScore(const Position &position) {
-    return whiteScore(position) - blackScore(position);
-}
-
-int whiteScore(const Position &position) {
-    for (int y = 7; y >= 0; y--) {
-        for (int x = 0; x < 8; x++) {
-            if (position.boardState[x][y] == White) {
-                return y;
-            }
-        }
-    }
-
-    return 0;
-}
-
-int blackScore(const Position &position) {
-    for (int y = 0; y < 8; y++) {
-        for (int x = 0; x < 8; x++) {
-            if (position.boardState[x][y] == Black) {
-                return 7 - y;
-            }
-        }
-    }
-
-    return 0;
-}
-
-vector<Position> getChildPositions(const Position &position) {
-    auto childPositions = vector<Position>();
-    CellState cellState = position.playerToMove == WhitePlayer ? White : Black;
-
-    for (int x = 0; x < 8; x++) {
-        for (int y = 0; y < 8; y++) {
-            if (position.boardState[x][y] != cellState) continue;
-
-            const vector<Move> &possibleMoves = position.getPossibleMoves(Cell(x, y));
-
-            for (auto it = possibleMoves.begin(); it != possibleMoves.end(); it++) {
-                Position childPosition = Position(position);
-                childPosition.makeMove(*it);
-                childPositions.push_back(childPosition);
-            }
-        }
-    }
-
-    return childPositions;
 }
