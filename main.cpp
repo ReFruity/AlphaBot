@@ -274,17 +274,17 @@ void test() {
 }
 
 int main(int argc, char *argv[]) {
-    debug = argc == 2 && strcmp(argv[1], "debug") == 0;
+//    debug = argc == 2 && strcmp(argv[1], "debug") == 0;
 
     if (debug) {
-        test();
-        freopen("input.txt", "r", stdin);
-        freopen("output.txt", "w", stdout);
+//        test();
+//        freopen("input.txt", "r", stdin);
+//        freopen("output.txt", "w", stdout);
     }
 
     int alpha = NEGATIVE_INF;
     int beta = POSITIVE_INF;
-    const int MAX_DEPTH = 10;
+    const int MAX_DEPTH = 11;
     Position position = Position();
     // TODO: Commented code
 //    cout << "result: " << alphaBetaPruning(position, alpha, beta, MAX_DEPTH) << endl;
@@ -295,7 +295,7 @@ int main(int argc, char *argv[]) {
         bestScore = NEGATIVE_INF;
     else
         bestScore = POSITIVE_INF;
-    Move bestMove = Move();
+    Move* bestMove;
     auto allMoves = position.getAllPossibleMoves();
     for (auto it = allMoves.begin(); it != allMoves.end(); it++) {
         Position childPosition = Position(position);
@@ -305,7 +305,7 @@ int main(int argc, char *argv[]) {
 
             if (score > bestScore) {
                 bestScore = score;
-                bestMove = *it;
+                bestMove = &*it;
             }
 
             alpha = max(alpha, bestScore);
@@ -315,20 +315,20 @@ int main(int argc, char *argv[]) {
 
             if (score < bestScore) {
                 bestScore = score;
-                bestMove = *it;
+                bestMove = &*it;
             }
 
             beta = min(beta, score);
         }
     }
 
-    cout << "Best move: " << bestMove << endl << "Best score: " << bestScore << endl;
+    cout << "Best move: " << *bestMove << endl << "Best score: " << bestScore << endl;
 
     return 0;
 }
 
 int alphaBetaPruning(const Position &position, int alpha, int beta, int depth) {
-    if (debug) cout << "alpha: " << alpha << " beta: " << beta << " depth: " << depth << endl;
+//    if (debug) cout << "alpha: " << alpha << " beta: " << beta << " depth: " << depth << endl;
     if (depth == 0 || position.isFinal()) {
         return position.countScore();
     }
@@ -343,7 +343,7 @@ int alphaBetaPruning(const Position &position, int alpha, int beta, int depth) {
             alpha = max(alpha, score);
             if (beta <= alpha) {
                 // TODO: Debug prints
-                if (debug) cout << "beta pruning " << score << " " << childPositions.size() << endl;
+//                if (debug) cout << "beta pruning " << score << " " << childPositions.size() << endl;
                 // Бета отсечение
                 break;
             }
@@ -355,7 +355,7 @@ int alphaBetaPruning(const Position &position, int alpha, int beta, int depth) {
             score = min(score, alphaBetaPruning(*it, alpha, beta, depth - 1));
             beta = min(beta, score);
             if (beta <= alpha) {
-                if (debug) cout << "alpha pruning " << score << " " << childPositions.size() << endl;
+//                if (debug) cout << "alpha pruning " << score << " " << childPositions.size() << endl;
                 // Альфа отсечение
                 break;
             }
