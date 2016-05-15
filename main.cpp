@@ -23,6 +23,8 @@ enum CellState {
 struct Cell {
     int x, y;
 
+    Cell() { }
+
     Cell(int x, int y) : x(x), y(y) { }
 
     Cell(char x, int y) : x(x - 'a'), y(y) { }
@@ -31,11 +33,13 @@ struct Cell {
 };
 
 std::ostream &operator<<(std::ostream &strm, Cell &cell) {
-    return strm << 'a' + cell.x << cell.y + 1;
+    return strm << (char)('a' + cell.x) << cell.y + 1;
 }
 
 struct Move {
     Cell from, to;
+
+    Move() { }
 
     Move(const Cell &from, const Cell &to) : from(from), to(to) { }
 
@@ -95,7 +99,20 @@ struct Position {
     }
 
     vector<Position> getChildPositions() const {
-        auto childPositions = vector<Position>();
+        auto result = vector<Position>();
+        const vector<Move> allPossibleMoves = this->getAllPossibleMoves();
+
+        for (auto it = allPossibleMoves.begin(); it != allPossibleMoves.end(); it++) {
+            Position childPosition = Position(*this);
+            childPosition.makeMove(*it);
+            result.push_back(childPosition);
+        }
+
+        return result;
+    }
+
+    vector<Move> getAllPossibleMoves() const {
+        auto result = vector<Move>();
         CellState cellState = this->playerToMove == WhitePlayer ? White : Black;
 
         for (int x = 0; x < 8; x++) {
@@ -103,19 +120,14 @@ struct Position {
                 if (this->boardState[x][y] != cellState) continue;
 
                 const vector<Move> &possibleMoves = this->getPossibleMoves(Cell(x, y));
-
-                for (auto it = possibleMoves.begin(); it != possibleMoves.end(); it++) {
-                    Position childPosition = Position(*this);
-                    childPosition.makeMove(*it);
-                    childPositions.push_back(childPosition);
-                }
+                result.insert(result.begin(), possibleMoves.begin(), possibleMoves.end());
             }
         }
 
-        return childPositions;
+        return result;
     }
 
-    vector<Move> getPossibleMoves(Cell cell) const {
+    vector<Move> getPossibleMoves(const Cell &cell) const {
         CellState cellState = getCellState(cell);
         vector<Move> result;
 
@@ -270,15 +282,53 @@ int main(int argc, char *argv[]) {
         freopen("output.txt", "w", stdout);
     }
 
+    int alpha = NEGATIVE_INF;
+    int beta = POSITIVE_INF;
     const int MAX_DEPTH = 10;
-    Position startingPosition = Position();
-    cout << alphaBetaPruning(startingPosition, NEGATIVE_INF, POSITIVE_INF, MAX_DEPTH) << endl;
-    cout << Position::entities << endl;
+    Position position = Position();
+    // TODO: Commented code
+//    cout << "result: " << alphaBetaPruning(position, alpha, beta, MAX_DEPTH) << endl;
+//    cout << "position entries: " << Position::entities << endl;
+
+    int bestScore;
+    if (position.playerToMove == WhitePlayer)
+        bestScore = NEGATIVE_INF;
+    else
+        bestScore = POSITIVE_INF;
+    Move bestMove = Move();
+    auto allMoves = position.getAllPossibleMoves();
+    for (auto it = allMoves.begin(); it != allMoves.end(); it++) {
+        Position childPosition = Position(position);
+        childPosition.makeMove(*it);
+        if (position.playerToMove == WhitePlayer) {
+            int score = alphaBetaPruning(childPosition, alpha, beta, MAX_DEPTH - 1);
+
+            if (score > bestScore) {
+                bestScore = score;
+                bestMove = *it;
+            }
+
+            alpha = max(alpha, bestScore);
+        }
+        else {
+            int score = alphaBetaPruning(childPosition, alpha, beta, MAX_DEPTH - 1);
+
+            if (score < bestScore) {
+                bestScore = score;
+                bestMove = *it;
+            }
+
+            beta = min(beta, score);
+        }
+    }
+
+    cout << "Best move: " << bestMove << endl << "Best score: " << bestScore << endl;
 
     return 0;
 }
 
 int alphaBetaPruning(const Position &position, int alpha, int beta, int depth) {
+    if (debug) cout << "alpha: " << alpha << " beta: " << beta << " depth: " << depth << endl;
     if (depth == 0 || position.isFinal()) {
         return position.countScore();
     }
@@ -293,9 +343,7 @@ int alphaBetaPruning(const Position &position, int alpha, int beta, int depth) {
             alpha = max(alpha, score);
             if (beta <= alpha) {
                 // TODO: Debug prints
-                if (debug) {
-                    cout << "beta pruning " << childPositions.size() << endl;
-                }
+                if (debug) cout << "beta pruning " << score << " " << childPositions.size() << endl;
                 // Бета отсечение
                 break;
             }
@@ -307,9 +355,7 @@ int alphaBetaPruning(const Position &position, int alpha, int beta, int depth) {
             score = min(score, alphaBetaPruning(*it, alpha, beta, depth - 1));
             beta = min(beta, score);
             if (beta <= alpha) {
-                if (debug) {
-                    cout << "alpha pruning " << childPositions.size() << endl;
-                }
+                if (debug) cout << "alpha pruning " << score << " " << childPositions.size() << endl;
                 // Альфа отсечение
                 break;
             }
