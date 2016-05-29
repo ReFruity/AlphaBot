@@ -4,6 +4,7 @@
 #include <cstring>
 #include <algorithm>
 #include <cassert>
+#include <ctime>
 
 using namespace std;
 
@@ -226,6 +227,8 @@ Move findBestMove(const Position &position, const int maxDepth);
 
 const int NEGATIVE_INF = INT_MIN, POSITIVE_INF = INT_MAX;
 
+clock_t deadline;
+
 bool debug = false;
 
 void test() {
@@ -260,6 +263,20 @@ void test() {
     assert(actualChildPositions[21].getCellState("h3") == White);
     assert(all_of(actualChildPositions.begin(), actualChildPositions.end(), [](Position p) { return p.playerToMove == BlackPlayer; }));
     assert(all_of(actualChildPositions.begin(), actualChildPositions.end(), [](Position p) { return p.moveNumber == 1; }));
+
+    position.makeMove("e2e3");
+    actualChildPositions = position.getChildPositions();
+    assert(actualChildPositions.size() == 22);
+    assert(actualChildPositions[0].getCellState("a7") == Empty);
+    assert(actualChildPositions[0].getCellState("a6") == Black);
+    assert(actualChildPositions[1].getCellState("a7") == Empty);
+    assert(actualChildPositions[1].getCellState("b6") == Black);
+    assert(actualChildPositions[20].getCellState("h7") == Empty);
+    assert(actualChildPositions[20].getCellState("g6") == Black);
+    assert(actualChildPositions[21].getCellState("h7") == Empty);
+    assert(actualChildPositions[21].getCellState("h6") == Black);
+    assert(all_of(actualChildPositions.begin(), actualChildPositions.end(), [](Position p) { return p.playerToMove == WhitePlayer; }));
+    assert(all_of(actualChildPositions.begin(), actualChildPositions.end(), [](Position p) { return p.moveNumber == 2; }));
 
     position.makeMove("e2e3");
     actualChildPositions = position.getChildPositions();
@@ -347,7 +364,7 @@ int main(int argc, char *argv[]) {
         freopen("output.txt", "w", stdout);
     }
 
-    const int MAX_DEPTH = 2;
+    const int MAX_DEPTH = 8;
     Position position;
     char input[10];
     Move bestMove;
@@ -368,6 +385,7 @@ int main(int argc, char *argv[]) {
             position.makeMove(input);
         }
 
+        deadline = clock_t(clock() + CLOCKS_PER_SEC * 2.8);
         bestMove = findBestMove(position, MAX_DEPTH);
         position.makeMove(bestMove);
         cout << bestMove << endl;
@@ -416,7 +434,8 @@ Move findBestMove(const Position &position, const int maxDepth) {
 
 int alphaBetaPruning(const Position &position, int alpha, int beta, int depth) {
 //    if (debug) cout << "alpha: " << alpha << " beta: " << beta << " depth: " << depth << endl;
-    if (depth == 0 || position.isFinal()) {
+
+    if (depth == 0 || position.isFinal() || clock() > deadline) {
         return position.score();
     }
 
