@@ -28,7 +28,7 @@ struct Cell {
 
     Cell(char x, int y) : x(x - 'a'), y(y) { }
 
-    Cell(const char *notation) : x(notation[0] - 'a'), y(notation[1] - '1') { }
+    Cell(const char notation[2]) : x(notation[0] - 'a'), y(notation[1] - '1') { }
 };
 
 ostream &operator<<(ostream &strm, Cell &cell) {
@@ -42,7 +42,7 @@ struct Move {
 
     Move(const Cell &from, const Cell &to) : from(from), to(to) { }
 
-    Move(const char *notation) : from(notation), to(notation + 2) { }
+    Move(const char notation[4]) : from(notation), to(notation + 2) { }
 };
 
 ostream &operator<<(ostream &strm, Move &move) {
@@ -85,7 +85,7 @@ struct Position {
         return boardState[cell.x][cell.y];
     }
 
-    CellState getCellState(const char *notation) const {
+    CellState getCellState(const char notation[2]) const {
         return getCellState(Cell(notation));
     }
 
@@ -157,7 +157,7 @@ struct Position {
         return result;
     }
 
-    vector<Move> getPossibleMoves(const char *notation) const {
+    vector<Move> getPossibleMoves(const char notation[2]) const {
         return getPossibleMoves(Cell(notation));
     }
 
@@ -168,7 +168,7 @@ struct Position {
         if (playerToMove == WhitePlayer) moveNumber++;
     }
 
-    void makeMove(const char *notation) {
+    void makeMove(const char notation[2]) {
         makeMove(Move(notation));
     }
 
@@ -193,7 +193,20 @@ struct Position {
     }
 
     int score() const {
-        return this->whiteScore() - this->blackScore();
+        int result = 0;
+
+        for (int y = 7; y >= 0; y--) {
+            for (int x = 0; x < 8; x++) {
+                if (this->boardState[x][y] == White) {
+                    result++;
+                }
+                if (this->boardState[x][y] == Black) {
+                    result--;
+                }
+            }
+        }
+
+        return result;
     }
 
     int whiteScore() const {
@@ -253,6 +266,8 @@ void test() {
 
     auto actualChildPositions = position.getChildPositions();
     assert(actualChildPositions.size() == 22);
+    assert(all_of(actualChildPositions.begin(), actualChildPositions.end(), [](Position p) { return p.playerToMove == BlackPlayer; }));
+    assert(all_of(actualChildPositions.begin(), actualChildPositions.end(), [](Position p) { return p.moveNumber == 1; }));
     assert(actualChildPositions[0].getCellState("a2") == Empty);
     assert(actualChildPositions[0].getCellState("a3") == White);
     assert(actualChildPositions[1].getCellState("a2") == Empty);
@@ -261,26 +276,12 @@ void test() {
     assert(actualChildPositions[20].getCellState("g3") == White);
     assert(actualChildPositions[21].getCellState("h2") == Empty);
     assert(actualChildPositions[21].getCellState("h3") == White);
-    assert(all_of(actualChildPositions.begin(), actualChildPositions.end(), [](Position p) { return p.playerToMove == BlackPlayer; }));
-    assert(all_of(actualChildPositions.begin(), actualChildPositions.end(), [](Position p) { return p.moveNumber == 1; }));
 
     position.makeMove("e2e3");
     actualChildPositions = position.getChildPositions();
     assert(actualChildPositions.size() == 22);
-    assert(actualChildPositions[0].getCellState("a7") == Empty);
-    assert(actualChildPositions[0].getCellState("a6") == Black);
-    assert(actualChildPositions[1].getCellState("a7") == Empty);
-    assert(actualChildPositions[1].getCellState("b6") == Black);
-    assert(actualChildPositions[20].getCellState("h7") == Empty);
-    assert(actualChildPositions[20].getCellState("g6") == Black);
-    assert(actualChildPositions[21].getCellState("h7") == Empty);
-    assert(actualChildPositions[21].getCellState("h6") == Black);
     assert(all_of(actualChildPositions.begin(), actualChildPositions.end(), [](Position p) { return p.playerToMove == WhitePlayer; }));
     assert(all_of(actualChildPositions.begin(), actualChildPositions.end(), [](Position p) { return p.moveNumber == 2; }));
-
-    position.makeMove("e2e3");
-    actualChildPositions = position.getChildPositions();
-    assert(actualChildPositions.size() == 22);
     assert(actualChildPositions[0].getCellState("a7") == Empty);
     assert(actualChildPositions[0].getCellState("a6") == Black);
     assert(actualChildPositions[1].getCellState("a7") == Empty);
@@ -289,7 +290,11 @@ void test() {
     assert(actualChildPositions[20].getCellState("g6") == Black);
     assert(actualChildPositions[21].getCellState("h7") == Empty);
     assert(actualChildPositions[21].getCellState("h6") == Black);
-    assert(all_of(actualChildPositions.begin(), actualChildPositions.end(), [](Position p) { return p.playerToMove == WhitePlayer; }));
+
+    position.makeMove("e7e6");
+    actualChildPositions = position.getChildPositions();
+    assert(actualChildPositions.size() == 23);
+    assert(all_of(actualChildPositions.begin(), actualChildPositions.end(), [](Position p) { return p.playerToMove == BlackPlayer; }));
     assert(all_of(actualChildPositions.begin(), actualChildPositions.end(), [](Position p) { return p.moveNumber == 2; }));
 
     position = Position();
@@ -315,6 +320,14 @@ void test() {
     int actual;
 
     position = Position();
+    assert(position.score() == 0);
+    position.makeMove("e2e7");
+    assert(position.score() == 1);
+
+    position = Position();
+    position.makeMove("e7e2");
+    assert(position.score() == -1);
+
     CellState boardState1[8][8] = {
             Empty, Empty, Empty, Empty, Black, Empty, Empty, Empty,
             Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty,
@@ -328,10 +341,10 @@ void test() {
     memcpy(position.boardState, boardState1, sizeof(CellState) * 8 * 8);
     assert(position.whiteScore() == 4);
     assert(position.blackScore() == 3);
-    assert(position.score() == 1);
+    assert(position.score() == 0);
 
     actual = alphaBetaPruning(position, NEGATIVE_INF, POSITIVE_INF, 2);
-    assert(actual == 1);
+    assert(actual == 0);
 
     position = Position();
     CellState boardState2[8][8] = {
@@ -364,7 +377,7 @@ int main(int argc, char *argv[]) {
         freopen("output.txt", "w", stdout);
     }
 
-    const int MAX_DEPTH = 8;
+    const int MAX_DEPTH = 6;
     Position position;
     char input[10];
     Move bestMove;
@@ -373,7 +386,7 @@ int main(int argc, char *argv[]) {
         cin >> input;
 
         if (strcmp(input, "Name") == 0) {
-            cout << "AlphaBot" << endl;
+            cout << "AlphaBot" << MAX_DEPTH << endl;
             continue;
         }
         else if (strcmp(input, "Quit") == 0) {
