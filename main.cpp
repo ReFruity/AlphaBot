@@ -1,5 +1,5 @@
 #include <vector>
-#include <climits>
+#include <cfloat>
 #include <iostream>
 #include <cstring>
 #include <algorithm>
@@ -22,13 +22,15 @@ enum CellState {
 struct Cell {
     int x, y;
 
-    Cell() { }
-
     Cell(int x, int y) : x(x), y(y) { }
 
     Cell(char x, int y) : x(x - 'a'), y(y) { }
 
     Cell(const char notation[2]) : x(notation[0] - 'a'), y(notation[1] - '1') { }
+
+    bool operator==(Cell other) {
+        return this->x == other.x && this->y == other.y;
+    }
 };
 
 ostream &operator<<(ostream &strm, Cell &cell) {
@@ -38,11 +40,17 @@ ostream &operator<<(ostream &strm, Cell &cell) {
 struct Move {
     Cell from, to;
 
-    Move() { }
-
     Move(const Cell &from, const Cell &to) : from(from), to(to) { }
 
     Move(const char notation[4]) : from(notation), to(notation + 2) { }
+
+    bool operator==(Move other) {
+        return this->from == other.from && this->to == other.to;
+    }
+
+    bool operator!=(Move other) {
+        return !(*this == other);
+    }
 };
 
 ostream &operator<<(ostream &strm, Move &move) {
@@ -52,7 +60,7 @@ ostream &operator<<(ostream &strm, Move &move) {
 struct Position {
     Player playerToMove;
     int moveNumber;
-    // [a-z][1-8]
+    // [a-h][1-8]
     CellState boardState[8][8];
 
     Position() {
@@ -161,7 +169,7 @@ struct Position {
         return getPossibleMoves(Cell(notation));
     }
 
-    void makeMove(Move move) {
+    void makeMove(const Move &move) {
         boardState[move.to.x][move.to.y] = boardState[move.from.x][move.from.y];
         boardState[move.from.x][move.from.y] = Empty;
         playerToMove = playerToMove == WhitePlayer ? BlackPlayer : WhitePlayer;
@@ -192,7 +200,19 @@ struct Position {
         return false;
     }
 
-    int score() const {
+    float score() const {
+        float x1 = 0.5, x2 = 0.5;
+        float result = this->p1()*x1 + this->p2()*x2;
+        float winScore = 10;
+
+        if (whiteWins()) result += winScore;
+        if (blackWins()) result -= winScore;
+
+        return result;
+    }
+
+    // Материал
+    float p1() const {
         int result = 0;
 
         for (int y = 7; y >= 0; y--) {
@@ -206,10 +226,15 @@ struct Position {
             }
         }
 
-        return result;
+        return result / 16;
     }
 
-    int whiteScore() const {
+    // Продвинутость лидирующей пешки
+    float p2() const {
+        return (whiteLeadingPawn() - blackLeadingPawn()) / 7;
+    }
+
+    int whiteLeadingPawn() const {
         for (int y = 7; y >= 0; y--) {
             for (int x = 0; x < 8; x++) {
                 if (this->boardState[x][y] == White) {
@@ -221,7 +246,7 @@ struct Position {
         return 0;
     }
 
-    int blackScore() const {
+    int blackLeadingPawn() const {
         for (int y = 0; y < 8; y++) {
             for (int x = 0; x < 8; x++) {
                 if (this->boardState[x][y] == Black) {
@@ -234,17 +259,21 @@ struct Position {
     }
 };
 
-int alphaBetaPruning(const Position &position, int alpha, int beta, int depth);
+float alphaBetaPruning(const Position &position, float alpha, float beta, int depth, clock_t deadline);
 
-Move findBestMove(const Position &position, const int maxDepth);
+Move findBestMove(const Position &position, const int maxDepth, clock_t deadline);
 
-const int NEGATIVE_INF = INT_MIN, POSITIVE_INF = INT_MAX;
-
-clock_t deadline;
+const float NEGATIVE_INF = -FLT_MAX, POSITIVE_INF = FLT_MAX;
 
 bool debug = false;
 
+bool close(float x, float y) {
+    return abs(x - y) < 1e37;
+}
+
 void test() {
+    clock_t deadline = clock_t(clock() + CLOCKS_PER_SEC * 100);
+
     Position position = Position();
     position.makeMove("e2e3");
     assert(position.getCellState("e2") == Empty);
@@ -317,16 +346,31 @@ void test() {
     assert(position.boardState[4][4] == Empty);
     assert(position.boardState[7][7] == Black);
 
-    int actual;
+    float actual;
 
     position = Position();
-    assert(position.score() == 0);
+
+    assert(close(position.p1(), 0));
+    assert(close(position.p2(), 0));
     position.makeMove("e2e7");
-    assert(position.score() == 1);
+    assert(close(position.p1(), (16-15)/16));
+    assert(close(position.p2(), (6-1)/7));
+
+    position = Position();
+
+    Move bestMove = findBestMove(position, 4, deadline);
+    assert(bestMove.from.y == 1);
+    assert(bestMove.to.y == 2);
+
+    position.makeMove("e2e3");
+    bestMove = findBestMove(position, 4, deadline);
+    assert(bestMove.from.y == 6);
+    assert(bestMove.to.y == 5);
 
     position = Position();
     position.makeMove("e7e2");
-    assert(position.score() == -1);
+    assert(close(position.p1(), (15-16)/16));
+    assert(close(position.p2(), (1-6)/7));
 
     CellState boardState1[8][8] = {
             Empty, Empty, Empty, Empty, Black, Empty, Empty, Empty,
@@ -339,11 +383,10 @@ void test() {
             Empty, Empty, Empty, Empty, White, Empty, Empty, Empty,
     };
     memcpy(position.boardState, boardState1, sizeof(CellState) * 8 * 8);
-    assert(position.whiteScore() == 4);
-    assert(position.blackScore() == 3);
-    assert(position.score() == 0);
+    assert(close(position.p1(), 0));
+    assert(close(position.p2(), (4-3)/7));
 
-    actual = alphaBetaPruning(position, NEGATIVE_INF, POSITIVE_INF, 2);
+    actual = alphaBetaPruning(position, NEGATIVE_INF, POSITIVE_INF, 2, deadline);
     assert(actual == 0);
 
     position = Position();
@@ -358,12 +401,11 @@ void test() {
             Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty,
     };
     memcpy(position.boardState, boardState2, sizeof(CellState) * 8 * 8);
-    assert(position.whiteScore() == 0);
-    assert(position.blackScore() == 0);
-    assert(position.score() == 0);
+    assert(close(position.p1(), 0));
+    assert(close(position.p2(), 0));
 
-    actual = alphaBetaPruning(position, NEGATIVE_INF, POSITIVE_INF, 2);
-    assert(actual == 0);
+    actual = alphaBetaPruning(position, NEGATIVE_INF, POSITIVE_INF, 2, deadline);
+    assert(close(actual, 0));
 
     cout << "All tests passed." << endl;
 }
@@ -380,7 +422,6 @@ int main(int argc, char *argv[]) {
     const int MAX_DEPTH = 6;
     Position position;
     char input[10];
-    Move bestMove;
 
     while(true) {
         cin >> input;
@@ -398,19 +439,19 @@ int main(int argc, char *argv[]) {
             position.makeMove(input);
         }
 
-        deadline = clock_t(clock() + CLOCKS_PER_SEC * 2.8);
-        bestMove = findBestMove(position, MAX_DEPTH);
+        clock_t deadline = clock_t(clock() + CLOCKS_PER_SEC * 2.8);
+        Move bestMove = findBestMove(position, MAX_DEPTH, deadline);
         position.makeMove(bestMove);
         cout << bestMove << endl;
         cout.flush();
     }
 }
 
-Move findBestMove(const Position &position, const int maxDepth) {
-    int alpha = NEGATIVE_INF;
-    int beta = POSITIVE_INF;
-    int bestScore;
-    Move bestMove;
+Move findBestMove(const Position &position, const int maxDepth, clock_t deadline) {
+    float alpha = NEGATIVE_INF;
+    float beta = POSITIVE_INF;
+    float bestScore;
+    Move bestMove("a0a0");
 
     if (position.playerToMove == WhitePlayer)
         bestScore = NEGATIVE_INF;
@@ -421,14 +462,15 @@ Move findBestMove(const Position &position, const int maxDepth) {
     for (auto it = allMoves.begin(); it != allMoves.end(); it++) {
         Position childPosition = Position(position);
         childPosition.makeMove(*it);
-        int score = alphaBetaPruning(childPosition, alpha, beta, maxDepth - 1);
+        float score = alphaBetaPruning(childPosition, alpha, beta, maxDepth - 1, deadline);
+
         if (position.playerToMove == WhitePlayer) {
             if (score > bestScore) {
                 bestScore = score;
                 bestMove = *it;
             }
 
-            alpha = max(alpha, bestScore);
+            alpha = max(alpha, score);
         }
         else {
             if (score < bestScore) {
@@ -441,11 +483,12 @@ Move findBestMove(const Position &position, const int maxDepth) {
     }
 
 //    if (debug) cout << "Best score: " << bestScore << endl;
+    assert(bestMove != Move("a0a0"));
 
     return bestMove;
 }
 
-int alphaBetaPruning(const Position &position, int alpha, int beta, int depth) {
+float alphaBetaPruning(const Position &position, float alpha, float beta, int depth, clock_t deadline) {
 //    if (debug) cout << "alpha: " << alpha << " beta: " << beta << " depth: " << depth << endl;
 
     if (depth == 0 || position.isFinal() || clock() > deadline) {
@@ -453,12 +496,13 @@ int alphaBetaPruning(const Position &position, int alpha, int beta, int depth) {
     }
 
     auto childPositions = position.getChildPositions();
-    int score;
+    float score;
 
+    // TODO: Refactor with one cycle as in findBestMove
     if (position.playerToMove == WhitePlayer) {
         score = NEGATIVE_INF;
         for (auto it = childPositions.begin(); it != childPositions.end(); it++) {
-            score = max(score, alphaBetaPruning(*it, alpha, beta, depth - 1));
+            score = max(score, alphaBetaPruning(*it, alpha, beta, depth - 1, 0));
             alpha = max(alpha, score);
             if (beta <= alpha) {
                 // TODO: Debug prints
@@ -471,7 +515,7 @@ int alphaBetaPruning(const Position &position, int alpha, int beta, int depth) {
     else {
         score = POSITIVE_INF;
         for (auto it = childPositions.begin(); it != childPositions.end(); it++) {
-            score = min(score, alphaBetaPruning(*it, alpha, beta, depth - 1));
+            score = min(score, alphaBetaPruning(*it, alpha, beta, depth - 1, 0));
             beta = min(beta, score);
             if (beta <= alpha) {
 //                if (debug) cout << "alpha pruning " << score << " " << childPositions.size() << endl;
