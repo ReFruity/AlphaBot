@@ -58,6 +58,8 @@ ostream &operator<<(ostream &strm, Move &move) {
 }
 
 struct Position {
+    static int total;
+
     Player playerToMove;
     int moveNumber;
     // [a-h][1-8]
@@ -75,6 +77,8 @@ struct Position {
         for (int y = 6; y < 8; y++) {
             fillY(y, Black);
         }
+
+        total++;
     }
 
     void fillY(int y, CellState cellState) {
@@ -87,6 +91,8 @@ struct Position {
         this->playerToMove = other.playerToMove;
         this->moveNumber = other.moveNumber;
         memcpy(this->boardState, other.boardState, sizeof(CellState) * 8 * 8);
+
+        total++;
     }
 
     CellState getCellState(Cell cell) const {
@@ -201,12 +207,12 @@ struct Position {
     }
 
     float score() const {
-        float x1 = 0.5, x2 = 0.5;
+        float x1 = 1, x2 = 0;
         float result = this->p1()*x1 + this->p2()*x2;
         float winScore = 10;
 
-        if (whiteWins()) result += winScore;
-        if (blackWins()) result -= winScore;
+//        if (whiteWins()) result += winScore;
+//        if (blackWins()) result -= winScore;
 
         return result;
     }
@@ -259,13 +265,17 @@ struct Position {
     }
 };
 
-float alphaBetaPruning(const Position &position, float alpha, float beta, int depth, clock_t deadline);
+int Position::total = 0;
+
+float alphaBetaPruning(const Position &position, float alpha, float beta, int depth, const clock_t deadline);
 
 Move findBestMove(const Position &position, const int maxDepth, clock_t deadline);
 
 const float NEGATIVE_INF = -FLT_MAX, POSITIVE_INF = FLT_MAX;
 
 bool debug = false;
+
+int clockCut = 0;
 
 bool close(float x, float y) {
     return abs(x - y) < 1e37;
@@ -431,7 +441,7 @@ int main(int argc, char *argv[]) {
             continue;
         }
         else if (strcmp(input, "Quit") == 0) {
-            return 0;
+            break;
         }
         else if (strcmp(input, "Start") == 0) {
         }
@@ -445,6 +455,9 @@ int main(int argc, char *argv[]) {
         cout << bestMove << endl;
         cout.flush();
     }
+
+    if (debug) cout << "Total nodes traversed: " << Position::total << endl;
+    if (debug) cout << "Clock cuts: " << clockCut << endl;
 }
 
 Move findBestMove(const Position &position, const int maxDepth, clock_t deadline) {
@@ -488,10 +501,16 @@ Move findBestMove(const Position &position, const int maxDepth, clock_t deadline
     return bestMove;
 }
 
-float alphaBetaPruning(const Position &position, float alpha, float beta, int depth, clock_t deadline) {
+float alphaBetaPruning(const Position &position, float alpha, float beta, int depth, const clock_t deadline) {
 //    if (debug) cout << "alpha: " << alpha << " beta: " << beta << " depth: " << depth << endl;
 
+    // TODO: Remove after debugging
+    if (clock() > deadline) {
+        clockCut++;
+    }
+
     if (depth == 0 || position.isFinal() || clock() > deadline) {
+//        if (debug) cout << "In final node with score: " << position.score() << ", total positions: " << Position::total << endl;
         return position.score();
     }
 
@@ -502,7 +521,7 @@ float alphaBetaPruning(const Position &position, float alpha, float beta, int de
     if (position.playerToMove == WhitePlayer) {
         score = NEGATIVE_INF;
         for (auto it = childPositions.begin(); it != childPositions.end(); it++) {
-            score = max(score, alphaBetaPruning(*it, alpha, beta, depth - 1, 0));
+            score = max(score, alphaBetaPruning(*it, alpha, beta, depth - 1, deadline));
             alpha = max(alpha, score);
             if (beta <= alpha) {
                 // TODO: Debug prints
@@ -515,7 +534,7 @@ float alphaBetaPruning(const Position &position, float alpha, float beta, int de
     else {
         score = POSITIVE_INF;
         for (auto it = childPositions.begin(); it != childPositions.end(); it++) {
-            score = min(score, alphaBetaPruning(*it, alpha, beta, depth - 1, 0));
+            score = min(score, alphaBetaPruning(*it, alpha, beta, depth - 1, deadline));
             beta = min(beta, score);
             if (beta <= alpha) {
 //                if (debug) cout << "alpha pruning " << score << " " << childPositions.size() << endl;
