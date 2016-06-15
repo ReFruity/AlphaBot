@@ -193,6 +193,10 @@ struct Position {
     }
 
     int score() const {
+        return p1() + p2() + p3() + winScore();
+    }
+
+    int p1() const {
         int result = 0;
 
         for (int y = 7; y >= 0; y--) {
@@ -209,7 +213,11 @@ struct Position {
         return result;
     }
 
-    int whiteScore() const {
+    int p2() const {
+        return whiteLeadingPawn() - blackLeadingPawn();
+    }
+
+    int whiteLeadingPawn() const {
         for (int y = 7; y >= 0; y--) {
             for (int x = 0; x < 8; x++) {
                 if (this->boardState[x][y] == White) {
@@ -221,7 +229,7 @@ struct Position {
         return 0;
     }
 
-    int blackScore() const {
+    int blackLeadingPawn() const {
         for (int y = 0; y < 8; y++) {
             for (int x = 0; x < 8; x++) {
                 if (this->boardState[x][y] == Black) {
@@ -230,6 +238,58 @@ struct Position {
             }
         }
 
+        return 0;
+    }
+
+    int p3() const {
+        int result = 0;
+
+        for (int y = 7; y >= 0; y--) {
+            for (int x = 0; x < 8; x++) {
+                if (this->boardState[x][y] == White) {
+                    result += this->interceptors(x, y);
+                }
+                if (this->boardState[x][y] == Black) {
+                    result -= this->interceptors(x, y);
+                }
+            }
+        }
+
+        return result;
+    }
+
+    int interceptors(const Cell &cell) const {
+        return this->interceptors(cell.x, cell.y);
+    }
+
+    int interceptors(int x0, int y0) const {
+        int result = 0;
+
+        if (boardState[x0][y0] == White) {
+            for (int y = y0 + 1; y <= 7; y++) {
+                for (int x = max(x0 - (y - y0), 0); x <= min(x0 + (y - y0), 7); x++) {
+                    if (boardState[x][y] == Black) {
+                        result++;
+                    }
+                }
+            }
+        }
+        else {
+            for (int y = y0 - 1; y >= 0; y--) {
+                for (int x = max(x0 - (y0 - y), 0); x <= min(x0 + (y0 - y), 7); x++) {
+                    if (boardState[x][y] == White) {
+                        result++;
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+
+    int winScore() const {
+        if (whiteWins()) return 1000;
+        if (blackWins()) return -1000;
         return 0;
     }
 };
@@ -320,14 +380,6 @@ void test() {
     int actual;
 
     position = Position();
-    assert(position.score() == 0);
-    position.makeMove("e2e7");
-    assert(position.score() == 1);
-
-    position = Position();
-    position.makeMove("e7e2");
-    assert(position.score() == -1);
-
     CellState boardState1[8][8] = {
             Empty, Empty, Empty, Empty, Black, Empty, Empty, Empty,
             Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty,
@@ -339,12 +391,10 @@ void test() {
             Empty, Empty, Empty, Empty, White, Empty, Empty, Empty,
     };
     memcpy(position.boardState, boardState1, sizeof(CellState) * 8 * 8);
-    assert(position.whiteScore() == 4);
-    assert(position.blackScore() == 3);
-    assert(position.score() == 0);
+    assert(position.whiteLeadingPawn() == 4);
+    assert(position.blackLeadingPawn() == 3);
 
     actual = alphaBetaPruning(position, NEGATIVE_INF, POSITIVE_INF, 2);
-    assert(actual == 0);
 
     position = Position();
     CellState boardState2[8][8] = {
@@ -358,12 +408,31 @@ void test() {
             Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty,
     };
     memcpy(position.boardState, boardState2, sizeof(CellState) * 8 * 8);
-    assert(position.whiteScore() == 0);
-    assert(position.blackScore() == 0);
+    assert(position.whiteLeadingPawn() == 0);
+    assert(position.blackLeadingPawn() == 0);
     assert(position.score() == 0);
 
     actual = alphaBetaPruning(position, NEGATIVE_INF, POSITIVE_INF, 2);
     assert(actual == 0);
+
+    position = Position();
+    assert(position.interceptors("e2") == 16);
+    assert(position.interceptors("e7") == 16);
+
+    position = Position();
+    CellState boardState3[8][8] = {
+            Empty, White, Empty, Empty, Black, Empty, Empty, Empty,
+            Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty,
+            Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty,
+            Empty, White, Empty, Empty, Empty, Empty, Empty, Empty,
+            White, Empty, Empty, Empty, Empty, Empty, Empty, Black,
+            Empty, Empty, Empty, Empty, Empty, Empty, Black, Empty,
+            Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty,
+            Empty, Empty, Empty, Empty, White, Empty, Empty, Black,
+    };
+    memcpy(position.boardState, boardState3, sizeof(CellState) * 8 * 8);
+    assert(position.interceptors("a5") == 3);
+    assert(position.interceptors("h5") == 3);
 
     cout << "All tests passed." << endl;
 }
@@ -377,7 +446,7 @@ int main(int argc, char *argv[]) {
         freopen("output.txt", "w", stdout);
     }
 
-    const int MAX_DEPTH = 6;
+    const int MAX_DEPTH = 5;
     Position position;
     char input[10];
     Move bestMove;
@@ -399,6 +468,7 @@ int main(int argc, char *argv[]) {
         }
 
         deadline = clock_t(clock() + CLOCKS_PER_SEC * 2.8);
+        if (debug) deadline += 1e8;
         bestMove = findBestMove(position, MAX_DEPTH);
         position.makeMove(bestMove);
         cout << bestMove << endl;
@@ -440,13 +510,10 @@ Move findBestMove(const Position &position, const int maxDepth) {
         }
     }
 
-//    if (debug) cout << "Best score: " << bestScore << endl;
-
     return bestMove;
 }
 
 int alphaBetaPruning(const Position &position, int alpha, int beta, int depth) {
-//    if (debug) cout << "alpha: " << alpha << " beta: " << beta << " depth: " << depth << endl;
 
     if (depth == 0 || position.isFinal() || clock() > deadline) {
         return position.score();
@@ -461,8 +528,6 @@ int alphaBetaPruning(const Position &position, int alpha, int beta, int depth) {
             score = max(score, alphaBetaPruning(*it, alpha, beta, depth - 1));
             alpha = max(alpha, score);
             if (beta <= alpha) {
-                // TODO: Debug prints
-//                if (debug) cout << "beta pruning " << score << " " << childPositions.size() << endl;
                 // Бета отсечение
                 break;
             }
@@ -474,7 +539,6 @@ int alphaBetaPruning(const Position &position, int alpha, int beta, int depth) {
             score = min(score, alphaBetaPruning(*it, alpha, beta, depth - 1));
             beta = min(beta, score);
             if (beta <= alpha) {
-//                if (debug) cout << "alpha pruning " << score << " " << childPositions.size() << endl;
                 // Альфа отсечение
                 break;
             }
@@ -483,5 +547,3 @@ int alphaBetaPruning(const Position &position, int alpha, int beta, int depth) {
 
     return score;
 }
-
-// TODO: Store game board as char[8][8], get rid of CellState
