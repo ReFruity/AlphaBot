@@ -193,7 +193,7 @@ struct Position {
     }
 
     int score() const {
-        return p1() + p2() + p3() + winScore();
+        return p1() + p2() + winScore();
     }
 
     int p1() const {
@@ -239,23 +239,6 @@ struct Position {
         }
 
         return 0;
-    }
-
-    int p3() const {
-        int result = 0;
-
-        for (int y = 7; y >= 0; y--) {
-            for (int x = 0; x < 8; x++) {
-                if (this->boardState[x][y] == White) {
-                    result += this->interceptors(x, y);
-                }
-                if (this->boardState[x][y] == Black) {
-                    result -= this->interceptors(x, y);
-                }
-            }
-        }
-
-        return result;
     }
 
     int interceptors(const Cell &cell) const {
@@ -446,7 +429,7 @@ int main(int argc, char *argv[]) {
         freopen("output.txt", "w", stdout);
     }
 
-    const int MAX_DEPTH = 5;
+    const int MAX_DEPTH = 4;
     Position position;
     char input[10];
     Move bestMove;
